@@ -34,7 +34,6 @@ setup(name='rlbench',
       packages=[
             'rlbench',
             'rlbench.backend',
-            'rlbench.action_modes',
             'rlbench.tasks',
             'rlbench.task_ttms',
             'rlbench.robot_ttms',

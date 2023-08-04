@@ -49,11 +49,19 @@ def get_stored_demos(amount: int, image_paths: bool, dataset_root: str,
         raise RuntimeError("Can't find the demos for %s at: %s" % (
             task_name, task_root))
 
-    # Sample an amount of examples for the variation of this task
-    examples_path = join(
-        task_root, VARIATIONS_FOLDER % variation_number,
-        EPISODES_FOLDER)
-    examples = listdir(examples_path)
+    if variation_number == -1:
+        # All variations
+        examples_path = join(
+            task_root, VARIATIONS_ALL_FOLDER,
+            EPISODES_FOLDER)
+        examples = listdir(examples_path)
+    else:
+        # Sample an amount of examples for the variation of this task
+        examples_path = join(
+            task_root, VARIATIONS_FOLDER % variation_number,
+            EPISODES_FOLDER)
+        examples = listdir(examples_path)
+
     if amount == -1:
         amount = len(examples)
     if amount > len(examples):
@@ -73,6 +81,20 @@ def get_stored_demos(amount: int, image_paths: bool, dataset_root: str,
         with open(join(example_path, LOW_DIM_PICKLE), 'rb') as f:
             obs = pickle.load(f)
 
+        if variation_number == -1:
+            with open(join(example_path, VARIATION_NUMBER), 'rb') as f:
+                obs.variation_number = pickle.load(f)
+        else:
+            obs.variation_number = variation_number
+
+        # language description
+        episode_descriptions_f = join(example_path, VARIATION_DESCRIPTIONS)
+        if exists(episode_descriptions_f):
+            with open(episode_descriptions_f, 'rb') as f:
+                descriptions = pickle.load(f)
+        else:
+            descriptions = ["unknown task description"]
+
         l_sh_rgb_f = join(example_path, LEFT_SHOULDER_RGB_FOLDER)
         l_sh_depth_f = join(example_path, LEFT_SHOULDER_DEPTH_FOLDER)
         l_sh_mask_f = join(example_path, LEFT_SHOULDER_MASK_FOLDER)
@@ -88,6 +110,21 @@ def get_stored_demos(amount: int, image_paths: bool, dataset_root: str,
         front_rgb_f = join(example_path, FRONT_RGB_FOLDER)
         front_depth_f = join(example_path, FRONT_DEPTH_FOLDER)
         front_mask_f = join(example_path, FRONT_MASK_FOLDER)
+        forward_rgb_f = join(example_path, FORWARD_RGB_FOLDER)
+        forward_depth_f = join(example_path, FORWARD_DEPTH_FOLDER)
+        forward_mask_f = join(example_path, FORWARD_MASK_FOLDER)
+        top_rgb_f = join(example_path, TOP_RGB_FOLDER)
+        top_depth_f = join(example_path, TOP_DEPTH_FOLDER)
+        top_mask_f = join(example_path, TOP_MASK_FOLDER)
+        back_rgb_f = join(example_path, BACK_RGB_FOLDER)
+        back_depth_f = join(example_path, BACK_DEPTH_FOLDER)
+        back_mask_f = join(example_path, BACK_MASK_FOLDER)
+        left_rgb_f = join(example_path, LEFT_RGB_FOLDER)
+        left_depth_f = join(example_path, LEFT_DEPTH_FOLDER)
+        left_mask_f = join(example_path, LEFT_MASK_FOLDER)
+        right_rgb_f = join(example_path, RIGHT_RGB_FOLDER)
+        right_depth_f = join(example_path, RIGHT_DEPTH_FOLDER)
+        right_mask_f = join(example_path, RIGHT_MASK_FOLDER)
 
         num_steps = len(obs)
 
@@ -100,6 +137,9 @@ def get_stored_demos(amount: int, image_paths: bool, dataset_root: str,
             raise RuntimeError('Broken dataset assumption')
 
         for i in range(num_steps):
+            # descriptions
+            obs[i].misc['descriptions'] = descriptions
+
             si = IMAGE_FORMAT % i
             if obs_config.left_shoulder_camera.rgb:
                 obs[i].left_shoulder_rgb = join(l_sh_rgb_f, si)
@@ -131,6 +171,36 @@ def get_stored_demos(amount: int, image_paths: bool, dataset_root: str,
                 obs[i].front_depth = join(front_depth_f, si)
             if obs_config.front_camera.mask:
                 obs[i].front_mask = join(front_mask_f, si)
+            if obs_config.forward_camera.rgb:
+                obs[i].forward_rgb = join(forward_rgb_f, si)
+            if obs_config.forward_camera.depth or obs_config.forward_camera.point_cloud:
+                obs[i].forward_depth = join(forward_depth_f, si)
+            if obs_config.forward_camera.mask:
+                obs[i].forward_mask = join(forward_mask_f, si)
+            if obs_config.top_camera.rgb:
+                obs[i].top_rgb = join(top_rgb_f, si)
+            if obs_config.top_camera.depth or obs_config.top_camera.point_cloud:
+                obs[i].top_depth = join(top_depth_f, si)
+            if obs_config.top_camera.mask:
+                obs[i].top_mask = join(top_mask_f, si)
+            if obs_config.back_camera.rgb:
+                obs[i].back_rgb = join(back_rgb_f, si)
+            if obs_config.back_camera.depth or obs_config.back_camera.point_cloud:
+                obs[i].back_depth = join(back_depth_f, si)
+            if obs_config.back_camera.mask:
+                obs[i].back_mask = join(back_mask_f, si)
+            if obs_config.left_camera.rgb:
+                obs[i].left_rgb = join(left_rgb_f, si)
+            if obs_config.left_camera.depth or obs_config.left_camera.point_cloud:
+                obs[i].left_depth = join(left_depth_f, si)
+            if obs_config.left_camera.mask:
+                obs[i].left_mask = join(left_mask_f, si)
+            if obs_config.right_camera.rgb:
+                obs[i].right_rgb = join(right_rgb_f, si)
+            if obs_config.right_camera.depth or obs_config.right_camera.point_cloud:
+                obs[i].right_depth = join(right_depth_f, si)
+            if obs_config.right_camera.mask:
+                obs[i].right_mask = join(right_mask_f, si)
 
             # Remove low dim info if necessary
             if not obs_config.joint_velocities:
@@ -177,6 +247,31 @@ def get_stored_demos(amount: int, image_paths: bool, dataset_root: str,
                         _resize_if_needed(
                             Image.open(obs[i].front_rgb),
                             obs_config.front_camera.image_size))
+                if obs_config.forward_camera.rgb:
+                    obs[i].forward_rgb = np.array(
+                        _resize_if_needed(
+                            Image.open(obs[i].forward_rgb),
+                            obs_config.forward_camera.image_size))
+                if obs_config.top_camera.rgb:
+                    obs[i].top_rgb = np.array(
+                        _resize_if_needed(
+                            Image.open(obs[i].top_rgb),
+                            obs_config.top_camera.image_size))
+                if obs_config.back_camera.rgb:
+                    obs[i].back_rgb = np.array(
+                        _resize_if_needed(
+                            Image.open(obs[i].back_rgb),
+                            obs_config.back_camera.image_size))
+                if obs_config.left_camera.rgb:
+                    obs[i].left_rgb = np.array(
+                        _resize_if_needed(
+                            Image.open(obs[i].left_rgb),
+                            obs_config.left_camera.image_size))
+                if obs_config.right_camera.rgb:
+                    obs[i].right_rgb = np.array(
+                        _resize_if_needed(
+                            Image.open(obs[i].right_rgb),
+                            obs_config.right_camera.image_size))
 
                 if obs_config.left_shoulder_camera.depth or obs_config.left_shoulder_camera.point_cloud:
                     l_sh_depth = image_to_float_array(
@@ -252,6 +347,80 @@ def get_stored_demos(amount: int, image_paths: bool, dataset_root: str,
                         obs[i].front_depth = obs_config.front_camera.depth_noise.apply(d)
                     else:
                         obs[i].front_depth = None
+                
+                if obs_config.forward_camera.depth or obs_config.forward_camera.point_cloud:
+                    forward_depth = image_to_float_array(
+                        _resize_if_needed(
+                            Image.open(obs[i].forward_depth),
+                            obs_config.forward_camera.image_size),
+                        DEPTH_SCALE)
+                    near = obs[i].misc['forward_camera_near']
+                    far = obs[i].misc['forward_camera_far']
+                    forward_depth_m = near + forward_depth * (far - near)
+                    if obs_config.forward_camera.depth:
+                        d = forward_depth_m if obs_config.forward_camera.depth_in_meters else forward_depth
+                        obs[i].forward_depth = obs_config.forward_camera.depth_noise.apply(d)
+                    else:
+                        obs[i].forward_depth = None
+                
+                if obs_config.top_camera.depth or obs_config.top_camera.point_cloud:
+                    top_depth = image_to_float_array(
+                        _resize_if_needed(
+                            Image.open(obs[i].top_depth),
+                            obs_config.top_camera.image_size),
+                        DEPTH_SCALE)
+                    near = obs[i].misc['top_camera_near']
+                    far = obs[i].misc['top_camera_far']
+                    top_depth_m = near + top_depth * (far - near)
+                    if obs_config.top_camera.depth:
+                        d = top_depth_m if obs_config.top_camera.depth_in_meters else top_depth
+                        obs[i].top_depth = obs_config.top_camera.depth_noise.apply(d)
+                    else:
+                        obs[i].top_depth = None
+                if obs_config.back_camera.depth or obs_config.back_camera.point_cloud:
+                    back_depth = image_to_float_array(
+                        _resize_if_needed(
+                            Image.open(obs[i].back_depth),
+                            obs_config.back_camera.image_size),
+                        DEPTH_SCALE)
+                    near = obs[i].misc['back_camera_near']
+                    far = obs[i].misc['back_camera_far']
+                    back_depth_m = near + back_depth * (far - near)
+                    if obs_config.back_camera.depth:
+                        d = back_depth_m if obs_config.back_camera.depth_in_meters else back_depth
+                        obs[i].back_depth = obs_config.back_camera.depth_noise.apply(d)
+                    else:
+                        obs[i].back_depth = None
+                
+                if obs_config.left_camera.depth or obs_config.left_camera.point_cloud:
+                    left_depth = image_to_float_array(
+                        _resize_if_needed(
+                            Image.open(obs[i].left_depth),
+                            obs_config.left_camera.image_size),
+                        DEPTH_SCALE)
+                    near = obs[i].misc['left_camera_near']
+                    far = obs[i].misc['left_camera_far']
+                    left_depth_m = near + left_depth * (far - near)
+                    if obs_config.left_camera.depth:
+                        d = left_depth_m if obs_config.left_camera.depth_in_meters else left_depth
+                        obs[i].left_depth = obs_config.left_camera.depth_noise.apply(d)
+                    else:
+                        obs[i].left_depth = None
+                
+                if obs_config.right_camera.depth or obs_config.right_camera.point_cloud:
+                    right_depth = image_to_float_array(
+                        _resize_if_needed(
+                            Image.open(obs[i].right_depth),
+                            obs_config.right_camera.image_size),
+                        DEPTH_SCALE)
+                    near = obs[i].misc['right_camera_near']
+                    far = obs[i].misc['right_camera_far']
+                    right_depth_m = near + right_depth * (far - near)
+                    if obs_config.right_camera.depth:
+                        d = right_depth_m if obs_config.right_camera.depth_in_meters else right_depth
+                        obs[i].right_depth = obs_config.right_camera.depth_noise.apply(d)
+                    else:
+                        obs[i].right_depth = None
 
                 if obs_config.left_shoulder_camera.point_cloud:
                     obs[i].left_shoulder_point_cloud = VisionSensor.pointcloud_from_depth_and_camera_params(
@@ -278,6 +447,35 @@ def get_stored_demos(amount: int, image_paths: bool, dataset_root: str,
                         front_depth_m,
                         obs[i].misc['front_camera_extrinsics'],
                         obs[i].misc['front_camera_intrinsics'])
+                if obs_config.forward_camera.point_cloud:
+                    obs[i].forward_point_cloud = VisionSensor.pointcloud_from_depth_and_camera_params(
+                        forward_depth_m,
+                        obs[i].misc['forward_camera_extrinsics'],
+                        obs[i].misc['forward_camera_intrinsics'])
+                if obs_config.top_camera.point_cloud:
+                    obs[i].top_point_cloud = VisionSensor.pointcloud_from_depth_and_camera_params(
+                        top_depth_m,
+                        obs[i].misc['top_camera_extrinsics'],
+                        obs[i].misc['top_camera_intrinsics'])
+                if obs_config.back_camera.point_cloud:
+                    obs[i].back_point_cloud = VisionSensor.pointcloud_from_depth_and_camera_params(
+                        back_depth_m,
+                        obs[i].misc['back_camera_extrinsics'],
+                        obs[i].misc['back_camera_intrinsics'])
+                if obs_config.left_camera.point_cloud:
+                    obs[i].left_point_cloud = VisionSensor.pointcloud_from_depth_and_camera_params(
+                        left_depth_m,
+                        obs[i].misc['left_camera_extrinsics'],
+                        obs[i].misc['left_camera_intrinsics'])
+                if obs_config.right_camera.point_cloud:
+                    obs[i].right_point_cloud = VisionSensor.pointcloud_from_depth_and_camera_params(
+                        right_depth_m,
+                        obs[i].misc['right_camera_extrinsics'],
+                        obs[i].misc['right_camera_intrinsics'])
+
+
+
+
 
                 # Masks are stored as coded RGB images.
                 # Here we transform them into 1 channel handles.
@@ -306,6 +504,31 @@ def get_stored_demos(amount: int, image_paths: bool, dataset_root: str,
                         _resize_if_needed(Image.open(
                             obs[i].front_mask),
                             obs_config.front_camera.image_size)))
+                if obs_config.forward_camera.mask:
+                    obs[i].forward_mask = rgb_handles_to_mask(np.array(
+                        _resize_if_needed(Image.open(
+                            obs[i].forward_mask),
+                            obs_config.forward_camera.image_size)))
+                if obs_config.top_camera.mask:
+                    obs[i].top_mask = rgb_handles_to_mask(np.array(
+                        _resize_if_needed(Image.open(
+                            obs[i].top_mask),
+                            obs_config.top_camera.image_size)))
+                if obs_config.back_camera.mask:
+                    obs[i].back_mask = rgb_handles_to_mask(np.array(
+                        _resize_if_needed(Image.open(
+                            obs[i].back_mask),
+                            obs_config.back_camera.image_size)))
+                if obs_config.left_camera.mask:
+                    obs[i].left_mask = rgb_handles_to_mask(np.array(
+                        _resize_if_needed(Image.open(
+                            obs[i].left_mask),
+                            obs_config.left_camera.image_size)))
+                if obs_config.right_camera.mask:
+                    obs[i].right_mask = rgb_handles_to_mask(np.array(
+                        _resize_if_needed(Image.open(
+                            obs[i].right_mask),
+                            obs_config.right_camera.image_size)))
 
         demos.append(obs)
     return demos

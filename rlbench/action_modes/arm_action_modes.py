@@ -2,8 +2,9 @@ from abc import abstractmethod
 
 import numpy as np
 from pyquaternion import Quaternion
-from pyrep.const import ConfigurationPathAlgorithms as Algos, ObjectType
+from pyrep.const import ConfigurationPathAlgorithms as Algos
 from pyrep.errors import ConfigurationPathError, IKError
+from pyrep.const import ObjectType
 
 from rlbench.backend.exceptions import InvalidActionError
 from rlbench.backend.robot import Robot
@@ -39,15 +40,6 @@ class ArmActionMode(object):
     def action(self, scene: Scene, action: np.ndarray):
         pass
 
-    def action_step(self, scene: Scene, action: np.ndarray):
-        pass
-
-    def action_pre_step(self, scene: Scene, action: np.ndarray):
-        pass
-
-    def action_post_step(self, scene: Scene, action: np.ndarray):
-        pass
-
     @abstractmethod
     def action_shape(self, scene: Scene):
         pass
@@ -61,20 +53,11 @@ class JointVelocity(ArmActionMode):
 
     Similar to the action space in many continious control OpenAI Gym envs.
     """
-
-    def action(self, scene: Scene, action: np.ndarray):
-        self.action_pre_step(scene, action)
-        self.action_step(scene, action)
-        self.action_post_step(scene, action)
     
-    def action_pre_step(self, scene: Scene, action: np.ndarray):
+    def action(self, scene: Scene, action: np.ndarray):
         assert_action_shape(action, self.action_shape(scene))
         scene.robot.arm.set_joint_target_velocities(action)
-
-    def action_step(self, scene: Scene, action: np.ndarray):
         scene.step()
-
-    def action_post_step(self, scene: Scene, action: np.ndarray):
         scene.robot.arm.set_joint_target_velocities(np.zeros_like(action))
 
     def action_shape(self, scene: Scene) -> tuple:
@@ -104,20 +87,11 @@ class JointPosition(ArmActionMode):
         self._absolute_mode = absolute_mode
 
     def action(self, scene: Scene, action: np.ndarray):
-        self.action_pre_step(scene, action)
-        self.action_step(scene, action)
-        self.action_post_step(scene, action)
-
-    def action_pre_step(self, scene: Scene, action: np.ndarray):
         assert_action_shape(action, self.action_shape(scene))
         a = action if self._absolute_mode else np.array(
             scene.robot.arm.get_joint_positions()) + action
         scene.robot.arm.set_joint_target_positions(a)
-
-    def action_step(self, scene: Scene, action: np.ndarray):
         scene.step()
-
-    def action_post_step(self, scene: Scene, action: np.ndarray):
         scene.robot.arm.set_joint_target_positions(
             scene.robot.arm.get_joint_positions())
 
@@ -138,18 +112,9 @@ class JointTorque(ArmActionMode):
         robot.arm.set_joint_forces(np.abs(action))
 
     def action(self, scene: Scene, action: np.ndarray):
-        self.action_pre_step(scene, action)
-        self.action_step(scene, action)
-        self.action_post_step(scene, action)
-
-    def action_pre_step(self, scene: Scene, action: np.ndarray):
         assert_action_shape(action, self.action_shape(scene))
         self._torque_action(scene.robot, action)
-
-    def action_step(self, scene: Scene, action: np.ndarray):
         scene.step()
-
-    def action_post_step(self, scene: Scene, action: np.ndarray):
         self._torque_action(scene.robot, scene.robot.arm.get_joint_forces())
         scene.robot.arm.set_joint_target_velocities(np.zeros_like(action))
 
@@ -194,7 +159,9 @@ class EndEffectorPoseViaPlanning(ArmActionMode):
         self._absolute_mode = absolute_mode
         self._frame = frame
         self._collision_checking = collision_checking
+        self._callable_each_step = None
         self._robot_shapes = None
+
         if frame not in ['world', 'end effector']:
             raise ValueError("Expected frame to one of: 'world, 'end effector'")
 
@@ -217,7 +184,10 @@ class EndEffectorPoseViaPlanning(ArmActionMode):
         pose = [a_x + x, a_y + y, a_z + z] + [qx, qy, qz, qw]
         return pose
 
-    def action(self, scene: Scene, action: np.ndarray):
+    def set_callable_each_step(self, callable_each_step):
+        self._callable_each_step = callable_each_step
+
+    def action(self, scene: Scene, action: np.ndarray, ignore_collisions: bool = True):
         assert_action_shape(action, (7,))
         assert_unit_quaternion(action[3:])
         if not self._absolute_mode and self._frame != 'end effector':
@@ -226,7 +196,7 @@ class EndEffectorPoseViaPlanning(ArmActionMode):
         self._quick_boundary_check(scene, action)
 
         colliding_shapes = []
-        if self._collision_checking:
+        if not ignore_collisions:
             if self._robot_shapes is None:
                 self._robot_shapes = scene.robot.arm.get_objects_in_tree(
                     object_type=ObjectType.SHAPE)
@@ -237,7 +207,7 @@ class EndEffectorPoseViaPlanning(ArmActionMode):
                 grasped_objects = scene.robot.gripper.get_grasped_objects()
                 colliding_shapes = [
                     s for s in scene.pyrep.get_objects_in_tree(
-                        object_type=ObjectType.SHAPE) if (
+                        object_type = ObjectType.SHAPE) if (
                             s.is_collidable() and
                             s not in self._robot_shapes and
                             s not in grasped_objects and
@@ -246,20 +216,38 @@ class EndEffectorPoseViaPlanning(ArmActionMode):
                 [s.set_collidable(False) for s in colliding_shapes]
 
         try:
-            path = scene.robot.arm.get_path(
-                action[:3],
-                quaternion=action[3:],
-                ignore_collisions=not self._collision_checking,
-                relative_to=relative_to,
-                trials=100,
-                max_configs=10,
-                max_time_ms=10,
-                trials_per_goal=5,
-                algorithm=Algos.RRTConnect
-            )
-            [s.set_collidable(True) for s in colliding_shapes]
+            # try once with collision checking (if ignore_collisions is true)
+            try:
+                path = scene.robot.arm.get_path(
+                    action[:3],
+                    quaternion=action[3:],
+                    ignore_collisions=ignore_collisions,
+                    relative_to=relative_to,
+                    trials=100,
+                    max_configs=10,
+                    max_time_ms=10,
+                    trials_per_goal=5,
+                    algorithm=Algos.RRTConnect
+                )
+            except ConfigurationPathError as e:
+                if ignore_collisions:
+                    raise InvalidActionError(
+                        'A path could not be found. Most likely due to the target '
+                        'being inaccessible or a collison was detected.') from e
+                else:
+                    # try once more with collision checking disabled
+                    path = scene.robot.arm.get_path(
+                        action[:3],
+                        quaternion=action[3:],
+                        ignore_collisions=True,
+                        relative_to=relative_to,
+                        trials=100,
+                        max_configs=10,
+                        max_time_ms=10,
+                        trials_per_goal=5,
+                        algorithm=Algos.RRTConnect
+                    )
         except ConfigurationPathError as e:
-            [s.set_collidable(True) for s in colliding_shapes]
             raise InvalidActionError(
                 'A path could not be found. Most likely due to the target '
                 'being inaccessible or a collison was detected.') from e
@@ -267,14 +255,23 @@ class EndEffectorPoseViaPlanning(ArmActionMode):
         while not done:
             done = path.step()
             scene.step()
+            if self._callable_each_step is not None:
+                # Record observations
+                self._callable_each_step(scene.get_observation())
             success, terminate = scene.task.success()
             # If the task succeeds while traversing path, then break early
-            if success:
+            if success and self._callable_each_step is None:
                 break
 
     def action_shape(self, scene: Scene) -> tuple:
         return 7,
 
+    def record_end(self, scene, steps=60, step_scene=True):
+        if self._callable_each_step is not None:
+            for _ in range(steps):
+                if step_scene:
+                    scene.step()
+                self._callable_each_step(scene.get_observation())
 
 class EndEffectorPoseViaIK(ArmActionMode):
     """High-level action where target pose is given and reached via IK.

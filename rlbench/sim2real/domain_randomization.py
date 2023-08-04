@@ -43,17 +43,14 @@ class RandomizationConfig(object):
 
     def __init__(self,
                  whitelist: List[str]=None,
-                 blacklist: List[str]=None,
-                 randomize_arm: bool = True):
+                 blacklist: List[str]=None):
         self.whitelist = whitelist
         self.blacklist = [] if blacklist is None else blacklist
-        self.randomize_arm = randomize_arm
 
     def should_randomize(self, obj_name: str):
         return ((self.whitelist is None and len(self.blacklist) == 0) or
                 (self.whitelist is not None and obj_name in self.whitelist) or
-                (obj_name not in self.blacklist)) and (
-                self.randomize_arm or 'panda' not in obj_name.lower())
+                (obj_name not in self.blacklist))
 
 
 class DynamicsRandomizationConfig(RandomizationConfig):
@@ -64,10 +61,9 @@ class VisualRandomizationConfig(RandomizationConfig):
 
     def __init__(self,
                  image_directory: str,
-                 whitelist: List[str] = None,
-                 blacklist: List[str] = None,
-                 randomize_arm: bool = True):
-        super().__init__(whitelist, blacklist, randomize_arm)
+                 whitelist: List[str]=None,
+                 blacklist: List[str]=None):
+        super().__init__(whitelist, blacklist)
         self._image_directory = image_directory
         if not os.path.exists(image_directory):
             raise NotADirectoryError(

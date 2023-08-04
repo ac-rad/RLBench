@@ -39,6 +39,11 @@ class ObservationConfig(object):
                  overhead_camera: CameraConfig = None,
                  wrist_camera: CameraConfig = None,
                  front_camera: CameraConfig = None,
+                 forward_camera: CameraConfig = None,
+                 back_camera: CameraConfig = None,
+                 top_camera: CameraConfig = None,
+                 left_camera: CameraConfig = None,
+                 right_camera: CameraConfig = None,
                  joint_velocities=True,
                  joint_velocities_noise: NoiseModel=Identity(),
                  joint_positions=True,
@@ -53,6 +58,7 @@ class ObservationConfig(object):
                  wrist_camera_matrix=False,
                  record_gripper_closing=False,
                  task_low_dim_state=False,
+                 record_ignore_collisions=True,
                  ):
         self.left_shoulder_camera = (
             CameraConfig() if left_shoulder_camera is None
@@ -69,6 +75,21 @@ class ObservationConfig(object):
         self.front_camera = (
             CameraConfig() if front_camera is None
             else front_camera)
+        self.forward_camera = (
+            CameraConfig() if forward_camera is None
+            else forward_camera)
+        self.back_camera = (
+            CameraConfig() if back_camera is None
+            else back_camera)
+        self.top_camera = (
+            CameraConfig() if top_camera is None
+            else top_camera) 
+        self.left_camera = (
+            CameraConfig() if left_camera is None
+            else left_camera)
+        self.right_camera = (
+            CameraConfig() if right_camera is None
+            else right_camera)
         self.joint_velocities = joint_velocities
         self.joint_velocities_noise = joint_velocities_noise
         self.joint_positions = joint_positions
@@ -83,6 +104,7 @@ class ObservationConfig(object):
         self.wrist_camera_matrix = wrist_camera_matrix
         self.record_gripper_closing = record_gripper_closing
         self.task_low_dim_state = task_low_dim_state
+        self.record_ignore_collisions = record_ignore_collisions
 
     def set_all(self, value: bool):
         self.set_all_high_dim(value)
@@ -94,6 +116,11 @@ class ObservationConfig(object):
         self.overhead_camera.set_all(value)
         self.wrist_camera.set_all(value)
         self.front_camera.set_all(value)
+        self.forward_camera.set_all(value)
+        self.back_camera.set_all(value)
+        self.top_camera.set_all(value)
+        self.left_camera.set_all(value)
+        self.right_camera.set_all(value)
 
     def set_all_low_dim(self, value: bool):
         self.joint_velocities = value
